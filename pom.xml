@@ -83,6 +83,19 @@
             <version>3.25.2</version>
         </dependency>
 
+        <!-- API Client -->
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-rest-client-jackson</artifactId>
+            <version>3.25.1</version>
+        </dependency>
+
+        <!-- Para generar el OpenAPI -->
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-smallrye-openapi</artifactId>
+            <version>${quarkus.platform.version}</version>
+        </dependency>
     </dependencies>
 
     <build>

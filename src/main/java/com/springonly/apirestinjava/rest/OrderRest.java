@@ -1,5 +1,6 @@
 package com.springonly.apirestinjava.rest;
 
+import com.springonly.apirestinjava.apiclient.RandomJokeApiClient;
 import com.springonly.apirestinjava.mapper.OrderApprovalMapper;
 import com.springonly.apirestinjava.mapper.OrderCreationMapper;
 import com.springonly.apirestinjava.mapper.OrderRejectionMapper;
@@ -20,6 +21,7 @@ import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import lombok.extern.slf4j.Slf4j;
+import org.eclipse.microprofile.rest.client.inject.RestClient;
 
 @Slf4j
 @ApplicationScoped
@@ -41,6 +43,10 @@ public class OrderRest {
 
     @Inject
     OrderRejectionMapper orderRejectionMapper;
+
+    @Inject
+    @RestClient
+    RandomJokeApiClient randomJokeApiClient;
 
     @POST
     @Path("/")
@@ -74,6 +80,8 @@ public class OrderRest {
         @PathParam("orderId") Long orderId
     ) {
         log.info("getOrder REQUEST: orderId={}", orderId);
+
+        log.info(randomJokeApiClient.getRandomJoke().toString());
 
         // Invoke logic
         OrderAndCreditAuxiliarDTO orderAndCreditAuxiliarDTO = orderService.getOrder(orderId);
