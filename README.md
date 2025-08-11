@@ -1,24 +1,32 @@
 # Entorno DEV
 
 ## Probar en vivo
+```bash
 mvn quarkus:dev
+```
 
 ## Compilar y ejecutar
+```bash
 clear
 mvn clean package -Dquarkus.profile=dev
 java -jar ./target/quarkus-app/quarkus-run.jar 
+```
 
 # Entorno PROD
 
 ## Compilar y ejecutar
+```bash
 clear
 mvn clean package
 java -jar ./target/quarkus-app/quarkus-run.jar
+```
 
 # Open API
 http://localhost:8080/q/openapi
 
-# Crear recursos Azure
+# Creación
+
+## Crear variables de entorno
 ```bash
 # Valores por defecto
 export SUBS=subs1
@@ -32,19 +40,25 @@ export SQL_SERVER_LOGIN_PASSWORD='P@ssw0rd$1234'
 
 export ACR_NAME=acrcantolao
 
-export DOCKER_IMAGE_VERSION=v1
-export DOCKER_IMAGE_LOCAL_TAG=quarkus/api-rest-in-java:$DOCKER_IMAGE_VERSION
-export DOCKER_IMAGE_CLOUD_TAG=$ACR_NAME.azurecr.io/$DOCKER_IMAGE_LOCAL_TAG
+export DOCKER_IMAGE_NAME=quarkus/api-rest-in-java
+export DOCKER_IMAGE_TAG=v1
+export DOCKER_IMAGE_LOCAL_NAME=$DOCKER_IMAGE_NAME:$DOCKER_IMAGE_TAG
+export DOCKER_IMAGE_CLOUD_NAME=$ACR_NAME.azurecr.io/$DOCKER_IMAGE_NAME:$DOCKER_IMAGE_TAG
 
 export LOG_ANALYTICS_WORKSPACE_NAME=lawscantolao
 
 export CONTAINER_APP_ENV_NAME=cappenvcantolao
 export CONTAINER_APP_NAME=cappcantolao
+```
 
-# Crear imagenes Docker
-docker build -f src/main/docker/Dockerfile -t $DOCKER_IMAGE_LOCAL_TAG .
-docker tag $DOCKER_IMAGE_LOCAL_TAG $DOCKER_IMAGE_CLOUD_TAG
+## Crear imágenes Docker
+```bash
+docker build -f src/main/docker/Dockerfile -t $DOCKER_IMAGE_LOCAL_NAME .
+docker tag $DOCKER_IMAGE_LOCAL_NAME $DOCKER_IMAGE_CLOUD_NAME
+````
 
+## Crear recursos Azure
+```bash
 # Logearse a Azure
 az login
 
@@ -82,10 +96,16 @@ az sql server firewall-rule create \
     --name AllowLocalIP \
     --start-ip-address $(curl -s -4 ifconfig.me) \
     --end-ip-address $(curl -s -4 ifconfig.me)
-      
-# Crear y configurar Azure Container Registry
+```
+
+## Ejecutar manualmente en la base de datos el siguiente script
+src/main/resources/sql/schema.sql
+
+## Crear y configurar Azure Container Registry
+```bash
 az acr create \
     --resource-group $RG \
+    --location $LOCATION \
     --name $ACR_NAME \
     --dnl-scope Unsecure \
     --sku Basic \
@@ -101,16 +121,18 @@ az acr login \
     --resource-group $RG \
     --name $ACR_NAME
 
-docker push $DOCKER_IMAGE_CLOUD_TAG
+docker push $DOCKER_IMAGE_CLOUD_NAME
 
 # Crear Log Analytics Workspace para el Container App Environment
 az monitor log-analytics workspace create \
     --resource-group $RG \
+    --location $LOCATION \
     --workspace-name $LOG_ANALYTICS_WORKSPACE_NAME
 
 # Crear el Container App Environment 
 az containerapp env create \
     --resource-group $RG \
+    --location $LOCATION \
     --name $CONTAINER_APP_ENV_NAME \
     --logs-destination log-analytics \
     --logs-workspace-id  $(az monitor log-analytics workspace show            --resource-group $RG --workspace-name $LOG_ANALYTICS_WORKSPACE_NAME --query customerId       --output tsv) \
@@ -121,7 +143,7 @@ az containerapp create \
     --resource-group $RG \
     --name $CONTAINER_APP_NAME \
     --environment $CONTAINER_APP_ENV_NAME \
-    --image $DOCKER_IMAGE_CLOUD_TAG \
+    --image $DOCKER_IMAGE_CLOUD_NAME \
     --target-port 8080 \
     --ingress 'external' \
     --registry-server $ACR_NAME.azurecr.io \
@@ -129,8 +151,85 @@ az containerapp create \
     --registry-password $(az acr credential show --resource-group $RG --name $ACR_NAME --query passwords[0].value -o tsv)
 ```
 
+## Agregar manualmente la IP del Container App en las reglas de firewall de la BD
+Ir al Shell de Azure
+```bash
+# Dentro del bash del shell
+export RG=rgcantolao
+export CONTAINER_APP_NAME=cappcantolao
+export SQL_SERVER_NAME=sqlsrvcantolao
+
+az containerapp exec \
+  --name $CONTAINER_APP_NAME \
+  --resource-group $RG \
+  --command "/bin/bash"
+
+# Dentro del bash del Container App, ejecutar y tomar nota de la IP retornada
+curl -s -4 ifconfig.me
+exit
+
+
+# Nuevamente dentro del bash del shell usar la IP retornada en el paso anterior
+export CONTAINER_APP_IP=104.43.204.253
+
+az sql server firewall-rule create \
+    --resource-group $RG \
+    --server $SQL_SERVER_NAME \
+    --name AllowContainerAppIP \
+    --start-ip-address $CONTAINER_APP_IP \
+    --end-ip-address $CONTAINER_APP_IP
+```
+
+# Limpieza
+
+## Eliminar recursos Docker locales
+```bash
+docker rmi "$DOCKER_IMAGE_CLOUD_NAME"
+docker rmi "$DOCKER_IMAGE_LOCAL_NAME"
+```
+
 ## Eliminar recursos Azure
 ```bash
-export RG=rgcantolao
-az group delete --name $RG --yes
+# Eliminar Container App
+az containerapp delete \
+    --resource-group $RG \
+    --name $CONTAINER_APP_NAME \
+    --yes
+
+# Eliminar Container App Environment (demora varios minutos)
+az containerapp env delete \
+    --resource-group $RG \
+    --name $CONTAINER_APP_ENV_NAME \
+    --yes
+
+# Eliminar Log Analytics workspace
+az monitor log-analytics workspace delete \
+    --resource-group $RG \
+    --workspace-name $LOG_ANALYTICS_WORKSPACE_NAME \
+    --force yes \
+    --yes
+
+# Eliminar Azure Container Registry
+az acr delete \
+    --resource-group $RG \
+    --name $ACR_NAME \
+    --yes
+
+# Eliminar Base de Datos
+az sql db delete \
+    --name $SQL_SERVER_DB_NAME \
+    --resource-group $RG \
+    --server $SQL_SERVER_NAME \
+    --yes
+
+# Eliminar el Servidor de Base de Datos
+az sql server delete \
+    --name $SQL_SERVER_NAME \
+    --resource-group $RG \
+    --yes
+  
+# Eliminar el Resource Group
+az group delete \
+    --name $RG \
+    --yes
 ```
